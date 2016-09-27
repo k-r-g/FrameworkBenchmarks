@@ -68,7 +68,7 @@ sudo useradd benchmarkdbuser -p benchmarkdbpass
 # MySQL
 ##############################
 echo "Setting up MySQL database"
-sudo DEBIAN_FRONTEND=noninteractive apt-get -y install mysql-server
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y install mysql-server libmysqlcppconn-dev python-dev libxml2-dev libxslt-dev
 
 sudo stop mysql
 # disable checking of disk size

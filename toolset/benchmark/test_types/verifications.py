@@ -1,6 +1,7 @@
 import json
 import re
-
+import oursql
+import itertools
 
 def basic_body_verification(body, url, is_json_check=True):
     '''
@@ -246,8 +247,39 @@ def verify_randomnumber_list(expected_len, headers, body, url, max_infraction='f
 
     return problems
 
+def dict_diff(first, second):
+    """ Return a dict of keys that differ with another config object.  If a value is
+    not found in one fo the configs, it will be represented by KEYNOTFOUND.
+    @param first:   Fist dictionary to diff.
+    @param second:  Second dicationary to diff.
+    @return diff:   Dict of Key => (first.val, second.val)
+    """
+    KEYNOTFOUND = '<KEYNOTFOUND>'       # KeyNotFound for dictDiff
+    diff = {}
+    # Check all keys in first dict
+    for key in first.keys():
+        if (not second.has_key(key)):
+            diff[key] = (first[key], KEYNOTFOUND)
+        elif (first[key] != second[key]):
+            diff[key] = (first[key], second[key])
+    # Check all keys in second dict to find missing
+    for key in second.keys():
+        if (not first.has_key(key)):
+            diff[key] = (KEYNOTFOUND, second[key])
+    return diff
 
-def verify_query_cases(self, cases, url):
+def get_current_world():
+    conn = oursql.connect(host='127.0.0.1', user='benchmarkdbuser', passwd='benchmarkdbpass', db='hello_world', port=3306)
+    cursor = conn.cursor(oursql.DictCursor)
+    cursor.execute('SELECT * FROM world ORDER BY id;')
+    world = {}
+    for row in cursor:
+        world[row['id']] = row['randomNumber']
+    cursor.close()
+    conn.close()
+    return world
+
+def verify_query_cases(self, cases, url, verify_updates=False):
     '''
     The the /updates and /queries tests accept a `queries` parameter
     that is expected to be between 1-500.
@@ -273,9 +305,13 @@ def verify_query_cases(self, cases, url):
     problems = []
     MAX = 500
     MIN = 1
+    world_state_prev = {}
 
     for q, max_infraction in cases:
         case_url = url + q
+
+        if verify_updates:
+            world_state_prev = get_current_world()
         headers, body = self.request_headers_and_body(case_url)
 
         try:
@@ -316,5 +352,14 @@ def verify_query_cases(self, cases, url):
                 problems += verify_randomnumber_list(
                     expected_len, headers, body, case_url, max_infraction)
                 problems += verify_headers(headers, case_url)
+
+        if verify_updates and expected_len > 0:
+            world_state_curr = get_current_world()
+            diffs = dict_diff(world_state_prev, world_state_curr)
+            # False positives are likely since the range of randoms is so small.
+            # We conservatively tolerate up to 50% of the number of changes
+            # expected to avoid false positives due to random collisions.
+            if (expected_len - len(diffs)) > expected_len / 2:
+                return [('fail', "Expected %i rows changed in database, found %i changed." % (expected_len, len(diffs)), url)]
 
     return problems

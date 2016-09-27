@@ -32,8 +32,8 @@ class UpdateTestType(FrameworkTestType):
             ('501', 'warn'),
             ('',    'warn')
         ]
-        problems = verify_query_cases(self, cases, url)
-
+        print '*^*^*^*^*^* args.database_user: {}'.format(self.args)
+        problems = verify_query_cases(self, cases, url, True)
         if len(problems) == 0:
             return [('pass', '', url + case) for (case, _) in cases]
         else:
